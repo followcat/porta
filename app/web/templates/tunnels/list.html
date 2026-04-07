@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Tunnels · Porta{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Inventory</p>
+    <h1>Tunnels</h1>
+  </div>
+  <a class="button primary" href="/tunnels/new">New Tunnel</a>
+</section>
+
+<section class="panel">
+  <form method="get" action="/tunnels" class="toolbar">
+    <input type="text" name="keyword" value="{{ filters.keyword or '' }}" placeholder="Search tunnel / host / description">
+    <input type="text" name="group_name" value="{{ filters.group_name or '' }}" placeholder="Group">
+    <select name="actual_state">
+      <option value="">Any runtime</option>
+      {% for state in ['running', 'degraded', 'failed', 'backoff', 'stopped', 'starting'] %}
+      <option value="{{ state }}" {% if filters.actual_state == state %}selected{% endif %}>{{ state }}</option>
+      {% endfor %}
+    </select>
+    <select name="desired_state">
+      <option value="">Any desired</option>
+      {% for state in ['running', 'stopped'] %}
+      <option value="{{ state }}" {% if filters.desired_state == state %}selected{% endif %}>{{ state }}</option>
+      {% endfor %}
+    </select>
+    <select name="enabled">
+      <option value="">Enabled or disabled</option>
+      <option value="true" {% if filters.enabled is sameas true %}selected{% endif %}>Enabled</option>
+      <option value="false" {% if filters.enabled is sameas false %}selected{% endif %}>Disabled</option>
+    </select>
+    <button type="submit" class="button subtle">Filter</button>
+  </form>
+</section>
+
+<section class="panel">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Group</th>
+        <th>Target</th>
+        <th>Desired</th>
+        <th>Actual</th>
+        <th>Heartbeat</th>
+        <th>Error</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tunnel in tunnels %}
+      {% set runtime = tunnel.runtime %}
+      <tr>
+        <td>
+          <a href="/tunnels/{{ tunnel.id }}">{{ tunnel.name }}</a>
+          <div class="muted">{{ tunnel.bind_address }}:{{ tunnel.local_port }} -> {{ tunnel.remote_host }}:{{ tunnel.remote_port }}</div>
+        </td>
+        <td>{{ tunnel.group_name or '—' }}</td>
+        <td>{{ tunnel.ssh_host }}:{{ tunnel.ssh_port }}</td>
+        <td><span class="badge">{{ tunnel.desired_state }}</span></td>
+        <td><span class="badge {{ runtime.actual_state if runtime else 'stopped' }}">{{ runtime.actual_state if runtime else 'stopped' }}</span></td>
+        <td>{{ runtime.heartbeat_at.strftime("%Y-%m-%d %H:%M:%S") if runtime and runtime.heartbeat_at else '—' }}</td>
+        <td>{{ runtime.current_error_code if runtime and runtime.current_error_code else '—' }}</td>
+        <td>
+          <div class="actions">
+            <form method="post" action="/tunnels/{{ tunnel.id }}/start"><button type="submit" class="button subtle">Start</button></form>
+            <form method="post" action="/tunnels/{{ tunnel.id }}/stop"><button type="submit" class="button subtle">Stop</button></form>
+            <form method="post" action="/tunnels/{{ tunnel.id }}/restart"><button type="submit" class="button subtle">Restart</button></form>
+            <a class="button ghost" href="/tunnels/{{ tunnel.id }}/edit">Edit</a>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" class="empty">No tunnels found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.tunnel.name }} · Porta{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Tunnel Detail</p>
+    <h1>{{ detail.tunnel.name }}</h1>
+    <p class="lead">{{ detail.tunnel.description or 'No description provided.' }}</p>
+  </div>
+  <div class="actions">
+    <form method="post" action="/tunnels/{{ detail.tunnel.id }}/start"><button type="submit" class="button subtle" data-busy-label="Starting...">Start</button></form>
+    <form method="post" action="/tunnels/{{ detail.tunnel.id }}/stop"><button type="submit" class="button subtle" data-busy-label="Stopping...">Stop</button></form>
+    <form method="post" action="/tunnels/{{ detail.tunnel.id }}/restart"><button type="submit" class="button subtle" data-busy-label="Restarting...">Restart</button></form>
+    <form method="post" action="/tunnels/{{ detail.tunnel.id }}/probe"><button type="submit" class="button subtle" data-busy-label="Probing...">Probe</button></form>
+    <a class="button primary" href="/tunnels/{{ detail.tunnel.id }}/edit">Edit</a>
+  </div>
+</section>
+
+<section class="grid-two">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Configuration</h2>
+    </div>
+    <dl class="meta-list">
+      <div><dt>SSH Target</dt><dd>{{ detail.tunnel.ssh_host }}:{{ detail.tunnel.ssh_port }}</dd></div>
+      <div><dt>Forward</dt><dd>{{ detail.tunnel.bind_address }}:{{ detail.tunnel.local_port }} -> {{ detail.tunnel.remote_host }}:{{ detail.tunnel.remote_port }}</dd></div>
+      <div><dt>Group</dt><dd>{{ detail.tunnel.group_name or '—' }}</dd></div>
+      <div><dt>Desired State</dt><dd>{{ detail.tunnel.desired_state }}</dd></div>
+      <div><dt>Healthcheck</dt><dd>{{ detail.tunnel.healthcheck_type }}{% if detail.tunnel.healthcheck_path %} {{ detail.tunnel.healthcheck_path }}{% endif %}</dd></div>
+      <div><dt>Tags</dt><dd>{{ detail.tunnel.tags | join(', ') if detail.tunnel.tags else '—' }}</dd></div>
+    </dl>
+  </div>
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Runtime</h2>
+    </div>
+    {% set runtime = detail.runtime %}
+    <dl class="meta-list">
+      <div><dt>Actual State</dt><dd><span class="badge {{ runtime.actual_state }}">{{ runtime.actual_state }}</span></dd></div>
+      <div><dt>PID</dt><dd>{{ runtime.pid or '—' }}</dd></div>
+      <div><dt>Started</dt><dd>{{ runtime.started_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.started_at else '—' }}</dd></div>
+      <div><dt>Last Seen</dt><dd>{{ runtime.last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.last_seen_at else '—' }}</dd></div>
+      <div><dt>Restart Count</dt><dd>{{ runtime.restart_count }}</dd></div>
+      <div><dt>Failures</dt><dd>{{ runtime.consecutive_failures }}</dd></div>
+      <div><dt>Health</dt><dd>{{ runtime.last_healthcheck_message or '—' }}</dd></div>
+      <div><dt>Error</dt><dd>{{ runtime.current_error_code or '—' }}{% if runtime.current_error_message %}<br>{{ runtime.current_error_message }}{% endif %}</dd></div>
+    </dl>
+  </div>
+</section>
+
+{% include "tunnels/log_panel.html" %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recent Events</h2>
+  </div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Type</th>
+        <th>Level</th>
+        <th>Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in detail.recent_events %}
+      <tr>
+        <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ event.event_type }}</td>
+        <td><span class="badge {{ event.level }}">{{ event.level }}</span></td>
+        <td>{{ event.message }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="empty">No events recorded.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

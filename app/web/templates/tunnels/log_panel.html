@@ -1,0 +1,50 @@
+<section
+  class="panel log-panel"
+  id="tunnel-log-panel"
+  hx-get="/tunnels/{{ detail.tunnel.id }}/logs"
+  hx-trigger="load, every 5s"
+  hx-swap="outerHTML"
+>
+  <div class="panel-head">
+    <div>
+      <h2>Latest Logs</h2>
+      <p class="muted">Auto-refreshes every 5 seconds.</p>
+    </div>
+    {% set runtime = detail.runtime %}
+    <span class="badge {{ runtime.actual_state }}">{{ runtime.actual_state }}</span>
+  </div>
+
+  <div class="log-summary-grid">
+    <article class="log-summary">
+      <span class="log-label">Current Error</span>
+      <strong>{{ runtime.current_error_code or 'none' }}</strong>
+      <p>{{ runtime.current_error_message or 'No active runtime error.' }}</p>
+    </article>
+    <article class="log-summary">
+      <span class="log-label">Last Seen</span>
+      <strong>{{ runtime.last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.last_seen_at else '—' }}</strong>
+      <p>PID {{ runtime.pid or '—' }} · Restart count {{ runtime.restart_count }}</p>
+    </article>
+  </div>
+
+  <div class="log-console">
+    {% for event in detail.recent_events[:12] %}
+    <div class="log-line">
+      <div class="log-meta">
+        <span>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</span>
+        <span class="badge {{ event.level }}">{{ event.level }}</span>
+        <span class="log-type">{{ event.event_type }}</span>
+      </div>
+      <div class="log-message">{{ event.message }}</div>
+      {% if event.detail %}
+      <details class="log-detail">
+        <summary>detail</summary>
+        <pre>{{ event.detail }}</pre>
+      </details>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="log-line empty">No logs recorded.</div>
+    {% endfor %}
+  </div>
+</section>

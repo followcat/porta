@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Tunnel' if tunnel else 'New Tunnel' }} · Porta{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Configuration</p>
+    <h1>{{ 'Edit Tunnel' if tunnel else 'Create Tunnel' }}</h1>
+  </div>
+</section>
+
+<section class="panel">
+  {% if error %}
+  <div class="alert error">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="{{ '/tunnels/{}/edit'.format(tunnel.id) if tunnel else '/tunnels/new' }}" class="stack">
+    <div class="form-grid">
+      <label>
+        <span>Name</span>
+        <input type="text" name="name" value="{{ tunnel.name if tunnel else '' }}" required>
+      </label>
+      <label>
+        <span>Group</span>
+        <input type="text" name="group_name" value="{{ tunnel.group_name if tunnel else '' }}">
+      </label>
+      <label class="span-2">
+        <span>Description</span>
+        <textarea name="description" rows="3">{{ tunnel.description if tunnel else '' }}</textarea>
+      </label>
+      <label>
+        <span>SSH Host</span>
+        <input type="text" name="ssh_host" value="{{ tunnel.ssh_host if tunnel else '' }}" required>
+      </label>
+      <label>
+        <span>SSH Port</span>
+        <input type="number" name="ssh_port" value="{{ tunnel.ssh_port if tunnel else 22 }}" required>
+      </label>
+      <label>
+        <span>Credential</span>
+        <select name="credential_id" required>
+          {% for credential in credentials %}
+          <option value="{{ credential.id }}" {% if tunnel and tunnel.credential_id == credential.id %}selected{% endif %}>
+            {{ credential.name }} ({{ credential.auth_type }})
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Bind Address</span>
+        <input type="text" name="bind_address" value="{{ tunnel.bind_address if tunnel else '127.0.0.1' }}" required>
+        <small class="field-help">Use <code>127.0.0.1</code> for local-only access. Use <code>0.0.0.0</code> for shared access on your network.</small>
+      </label>
+      <label>
+        <span>Local Port</span>
+        <input type="number" name="local_port" value="{{ tunnel.local_port if tunnel else '' }}" required>
+      </label>
+      <label>
+        <span>Remote Host</span>
+        <input type="text" name="remote_host" value="{{ tunnel.remote_host if tunnel else '' }}" required>
+      </label>
+      <label>
+        <span>Remote Port</span>
+        <input type="number" name="remote_port" value="{{ tunnel.remote_port if tunnel else '' }}" required>
+      </label>
+      <label>
+        <span>Desired State</span>
+        <select name="desired_state">
+          {% for state in ['running', 'stopped'] %}
+          <option value="{{ state }}" {% if (tunnel and tunnel.desired_state == state) or (not tunnel and state == 'running') %}selected{% endif %}>{{ state }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Restart Policy</span>
+        <select name="restart_policy">
+          {% for policy in ['always', 'on-failure', 'never'] %}
+          <option value="{{ policy }}" {% if (tunnel and tunnel.restart_policy == policy) or (not tunnel and policy == 'always') %}selected{% endif %}>{{ policy }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Backoff Seconds</span>
+        <input type="number" name="restart_backoff_seconds" value="{{ tunnel.restart_backoff_seconds if tunnel else 5 }}">
+      </label>
+      <label>
+        <span>Max Backoff Seconds</span>
+        <input type="number" name="max_restart_backoff_seconds" value="{{ tunnel.max_restart_backoff_seconds if tunnel else 300 }}">
+      </label>
+      <label>
+        <span>Max Retry Count</span>
+        <input type="number" name="max_retry_count" value="{{ tunnel.max_retry_count if tunnel and tunnel.max_retry_count is not none else '' }}">
+      </label>
+      <label>
+        <span>Check Interval</span>
+        <input type="number" name="check_interval_seconds" value="{{ tunnel.check_interval_seconds if tunnel else 10 }}">
+      </label>
+      <label>
+        <span>Healthcheck Type</span>
+        <select name="healthcheck_type">
+          {% for kind in ['none', 'tcp', 'http'] %}
+          <option value="{{ kind }}" {% if (tunnel and tunnel.healthcheck_type == kind) or (not tunnel and kind == 'tcp') %}selected{% endif %}>{{ kind }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Healthcheck Path</span>
+        <input type="text" name="healthcheck_path" value="{{ tunnel.healthcheck_path if tunnel else '' }}" placeholder="/healthz">
+      </label>
+      <label>
+        <span>Healthcheck Timeout (ms)</span>
+        <input type="number" name="healthcheck_timeout_ms" value="{{ tunnel.healthcheck_timeout_ms if tunnel else 3000 }}">
+      </label>
+      <label>
+        <span>Healthcheck Interval (s)</span>
+        <input type="number" name="healthcheck_interval_seconds" value="{{ tunnel.healthcheck_interval_seconds if tunnel else 15 }}">
+      </label>
+      <label class="span-2">
+        <span>Tags</span>
+        <input type="text" name="tags" value="{{ tunnel.tags | join(', ') if tunnel and tunnel.tags else '' }}" placeholder="prod, api, reporting">
+      </label>
+    </div>
+
+    <div class="alert warning">
+      Binding to <code>0.0.0.0</code> exposes the forwarded local port to the network. When you choose shared access, Porta will automatically enable gateway ports for this tunnel.
+    </div>
+
+    <div class="check-grid">
+      <label class="check">
+        <input type="checkbox" name="enabled" {% if not tunnel or tunnel.enabled %}checked{% endif %}>
+        <span>Enabled</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="auto_start" {% if not tunnel or tunnel.auto_start %}checked{% endif %}>
+        <span>Auto Start</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="strict_host_key_checking" {% if not tunnel or tunnel.strict_host_key_checking %}checked{% endif %}>
+        <span>Strict Host Key Checking</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="allow_gateway_ports" {% if tunnel and tunnel.allow_gateway_ports %}checked{% endif %}>
+        <span>Allow Shared Access (-g)</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="button primary">{{ 'Save Changes' if tunnel else 'Create Tunnel' }}</button>
+      <a class="button ghost" href="{{ '/tunnels/{}'.format(tunnel.id) if tunnel else '/tunnels' }}">Cancel</a>
+    </div>
+  </form>
+  {% if tunnel %}
+  <form method="post" action="/tunnels/{{ tunnel.id }}/delete" onsubmit="return confirm('Delete this tunnel?');" class="inline-top">
+    <button type="submit" class="button danger">Delete</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

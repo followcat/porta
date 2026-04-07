@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Porta{% endblock %}
+{% block content %}
+<section class="section-head">
+  <div>
+    <p class="eyebrow">Overview</p>
+    <h1>Runtime Dashboard</h1>
+  </div>
+</section>
+
+<section class="stats">
+  <article class="stat">
+    <span>Total</span>
+    <strong>{{ summary.total }}</strong>
+  </article>
+  <article class="stat running">
+    <span>Running</span>
+    <strong>{{ summary.running }}</strong>
+  </article>
+  <article class="stat degraded">
+    <span>Degraded</span>
+    <strong>{{ summary.degraded }}</strong>
+  </article>
+  <article class="stat failed">
+    <span>Failed</span>
+    <strong>{{ summary.failed }}</strong>
+  </article>
+  <article class="stat">
+    <span>Stopped</span>
+    <strong>{{ summary.stopped }}</strong>
+  </article>
+  <article class="stat error">
+    <span>Recent Errors</span>
+    <strong>{{ summary.recent_errors }}</strong>
+  </article>
+</section>
+
+<section class="grid-two">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Recent Events</h2>
+      <a href="/tunnels">All tunnels</a>
+    </div>
+    <table class="table compact">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for event in recent_events %}
+        <tr>
+          <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+          <td><span class="badge {{ event.level }}">{{ event.event_type }}</span></td>
+          <td>{{ event.message }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="3" class="empty">No events yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Most Restarted</h2>
+      <a href="/tunnels">Manage</a>
+    </div>
+    <table class="table compact">
+      <thead>
+        <tr>
+          <th>Tunnel</th>
+          <th>State</th>
+          <th>Restarts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tunnel in busiest_tunnels %}
+        <tr>
+          <td><a href="/tunnels/{{ tunnel.id }}">{{ tunnel.name }}</a></td>
+          <td>
+            {% set runtime = tunnel.runtime %}
+            <span class="badge {{ runtime.actual_state if runtime else 'stopped' }}">{{ runtime.actual_state if runtime else 'stopped' }}</span>
+          </td>
+          <td>{{ runtime.restart_count if runtime else 0 }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="3" class="empty">No tunnels configured.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

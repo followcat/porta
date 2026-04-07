@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Login · Porta{% endblock %}
+{% block content %}
+<section class="hero login-hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Single-node tunnel control</p>
+    <h1>Operate SSH forwards without living in shell history.</h1>
+    <p class="lead">Porta keeps tunnel configuration, runtime state, events, and encrypted credentials in one place.</p>
+  </div>
+  <div class="panel auth-panel">
+    <h2>Admin Login</h2>
+    {% if error %}
+    <div class="alert error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login" class="stack">
+      <label>
+        <span>Username</span>
+        <input type="text" name="username" required autofocus>
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" required>
+      </label>
+      <button type="submit" class="button primary wide">Enter Console</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
