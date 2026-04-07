@@ -33,6 +33,9 @@ def test_password_command_uses_sshpass(monkeypatch):
     assert command.env["SSHPASS"] == "top-secret"
     assert "top-secret" not in command.masked_command
     assert "ConnectTimeout=10" in command.argv
+    assert "CheckHostIP=no" in command.argv
+    assert "StrictHostKeyChecking=yes" in command.argv
+    assert "UserKnownHostsFile=" in " ".join(command.argv)
     assert "PreferredAuthentications=password,keyboard-interactive" in command.argv
     assert "PubkeyAuthentication=no" in command.argv
     assert "NumberOfPasswordPrompts=1" in command.argv
@@ -68,6 +71,8 @@ def test_key_command_masks_identity_path(monkeypatch):
     assert "/tmp/porta_key_secret.pem" not in command.masked_command
     assert "porta_key_secret.pem" in command.masked_command
     assert "ConnectTimeout=10" in command.argv
+    assert "CheckHostIP=no" in command.argv
+    assert "StrictHostKeyChecking=no" in command.argv
     assert "IdentitiesOnly=yes" in command.argv
 
 

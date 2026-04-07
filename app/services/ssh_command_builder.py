@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import os
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -36,6 +37,8 @@ class SSHCommandBuilder:
     ) -> SSHCommandParts:
         ssh_bin = resolve_executable(self.settings.ssh_bin, "ssh") or self.settings.ssh_bin
         sshpass_bin = resolve_executable(self.settings.sshpass_bin, "sshpass") or self.settings.sshpass_bin
+        strict_host_key_value = "yes" if strict_host_key_checking else "no"
+        known_hosts_file = os.path.expanduser(self.settings.ssh_known_hosts_file)
 
         ssh_argv = [
             ssh_bin,
@@ -51,7 +54,11 @@ class SSHCommandBuilder:
             "-o",
             "TCPKeepAlive=yes",
             "-o",
-            f"StrictHostKeyChecking={'yes' if strict_host_key_checking else 'no'}",
+            "CheckHostIP=no",
+            "-o",
+            f"UserKnownHostsFile={known_hosts_file}",
+            "-o",
+            f"StrictHostKeyChecking={strict_host_key_value}",
             "-L",
             f"{bind_address}:{local_port}:{remote_host}:{remote_port}",
             "-p",

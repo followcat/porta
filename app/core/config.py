@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     ssh_bin: str = "/usr/bin/ssh"
     sshpass_bin: str = "/usr/bin/sshpass"
+    ssh_keyscan_bin: str = "/usr/bin/ssh-keyscan"
+    ssh_known_hosts_file: str = "~/.ssh/known_hosts"
     supervisor_loop_seconds: int = 3
     tunnel_startup_grace_seconds: int = 2
     session_cookie_name: str = "porta_session"

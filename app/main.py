@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         manager.stop()
+        await registry.terminate_all()
         task.cancel()
         try:
             await task

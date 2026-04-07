@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings, resolve_executable
 from app.core.enums import ActualState, AuthType, DesiredState, EventLevel, HealthcheckType, RestartPolicy
+from app.core.exceptions import DependencyMissingError, ValidationError
 from app.db.base import utcnow
 from app.db.models.tunnel import Tunnel
 from app.db.models.tunnel_event import TunnelEvent
@@ -22,6 +23,7 @@ from app.services.credential_service import CredentialService
 from app.services.healthcheck_service import HealthcheckService
 from app.services.port_probe_service import PortProbeService
 from app.services.ssh_command_builder import SSHCommandBuilder
+from app.services.ssh_known_hosts_service import SSHKnownHostsService
 from app.supervisor.backoff import compute_backoff
 from app.supervisor.process_registry import ManagedProcess, ProcessRegistry
 from app.supervisor.state_machine import transition
@@ -48,39 +50,41 @@ class TunnelWorker:
         self.port_probe = PortProbeService()
         self.healthchecks = HealthcheckService()
         self.command_builder = SSHCommandBuilder()
+        self.known_hosts = SSHKnownHostsService()
 
     async def reconcile(self) -> None:
-        with self.session_factory() as session:
-            tunnel_repo = TunnelRepository(session)
-            runtime_repo = TunnelRuntimeRepository(session)
-            tunnel = tunnel_repo.get(self.tunnel_id)
-            if not tunnel:
-                session.commit()
-                return
-            runtime = runtime_repo.get_or_create(self.tunnel_id)
+        async with self.registry.lock_for(self.tunnel_id):
+            with self.session_factory() as session:
+                tunnel_repo = TunnelRepository(session)
+                runtime_repo = TunnelRuntimeRepository(session)
+                tunnel = tunnel_repo.get(self.tunnel_id)
+                if not tunnel:
+                    session.commit()
+                    return
+                runtime = runtime_repo.get_or_create(self.tunnel_id)
 
-            if tunnel.desired_state == DesiredState.STOPPED.value or not tunnel.enabled:
-                await self.ensure_stopped(session, tunnel, runtime)
-                session.commit()
-                return
+                if tunnel.desired_state == DesiredState.STOPPED.value or not tunnel.enabled:
+                    await self.ensure_stopped(session, tunnel, runtime)
+                    session.commit()
+                    return
 
-            if runtime.actual_state == ActualState.FAILED.value:
-                session.commit()
-                return
+                if runtime.actual_state == ActualState.FAILED.value:
+                    session.commit()
+                    return
 
-            if runtime.actual_state == ActualState.BACKOFF.value and runtime.next_retry_at and utcnow() < runtime.next_retry_at:
-                session.commit()
-                return
+                if runtime.actual_state == ActualState.BACKOFF.value and runtime.next_retry_at and utcnow() < runtime.next_retry_at:
+                    session.commit()
+                    return
 
-            managed = self.registry.get(self.tunnel_id)
-            process = managed.process if managed else None
-            if process is None or process.returncode is not None:
-                await self.handle_not_running(session, tunnel, runtime, managed)
-                session.commit()
-                return
+                managed = self.registry.get(self.tunnel_id)
+                process = managed.process if managed else None
+                if process is None or process.returncode is not None:
+                    await self.handle_not_running(session, tunnel, runtime, managed)
+                    session.commit()
+                    return
 
-            await self.perform_checks(session, tunnel, runtime, managed)
-            session.commit()
+                await self.perform_checks(session, tunnel, runtime, managed)
+                session.commit()
 
     async def ensure_stopped(self, session: Session, tunnel: Tunnel, runtime: TunnelRuntime) -> None:
         managed = self.registry.get(tunnel.id)
@@ -88,6 +92,7 @@ class TunnelWorker:
         if already_stopped:
             runtime.heartbeat_at = utcnow()
             return
+        previous_pid = runtime.pid
         runtime.actual_state = transition(runtime.actual_state, ActualState.STOPPING.value)
         if managed:
             await self._terminate_managed(managed)
@@ -107,6 +112,11 @@ class TunnelWorker:
                 event_type="process_stopped",
                 level=EventLevel.INFO.value,
                 message="Tunnel process stopped",
+                detail={
+                    "previous_pid": previous_pid,
+                    "ssh_target": self._ssh_target(tunnel),
+                    "forward": self._forward_description(tunnel),
+                },
             )
         )
 
@@ -211,6 +221,11 @@ class TunnelWorker:
                 event_type="healthcheck_failed",
                 level=EventLevel.WARN.value,
                 message=result.message,
+                detail={
+                    "healthcheck_type": tunnel.healthcheck_type,
+                    "check_host": self.port_probe.local_check_host(tunnel.bind_address),
+                    "local_port": tunnel.local_port,
+                },
             )
         )
 
@@ -231,6 +246,30 @@ class TunnelWorker:
         if not self.port_probe.is_bind_available(tunnel.bind_address, tunnel.local_port):
             await self._record_failure(session, tunnel, runtime, "PORT_CONFLICT", "Local port is already occupied", retryable=False, return_code=return_code)
             return
+
+        if tunnel.strict_host_key_checking:
+            try:
+                result = await self.known_hosts.ensure_known_host(tunnel.ssh_host, tunnel.ssh_port)
+            except DependencyMissingError as exc:
+                await self._record_failure(session, tunnel, runtime, "SSH_KEYSCAN_MISSING", str(exc), retryable=False, return_code=return_code)
+                return
+            except ValidationError as exc:
+                await self._record_failure(session, tunnel, runtime, "HOST_KEY_SCAN_FAILED", str(exc), retryable=True, return_code=return_code)
+                return
+            else:
+                if result.added:
+                    self._event_repo(session).add(
+                        TunnelEvent(
+                            tunnel_id=tunnel.id,
+                            event_type="host_key_added",
+                            level=EventLevel.INFO.value,
+                            message=f"Added {result.entries_added} host key entry to known_hosts",
+                            detail={
+                                "known_hosts_path": result.known_hosts_path,
+                                "ssh_target": self._ssh_target(tunnel),
+                            },
+                        )
+                    )
 
         credential_service = CredentialService(session)
         decrypted = credential_service.decrypt_credential(tunnel.credential)
@@ -277,6 +316,13 @@ class TunnelWorker:
                 event_type="process_started",
                 level=EventLevel.INFO.value,
                 message=f"SSH tunnel process started (pid={proc.pid})",
+                detail={
+                    "pid": proc.pid,
+                    "command_line": command.masked_command,
+                    "ssh_target": self._ssh_target(tunnel),
+                    "forward": self._forward_description(tunnel),
+                    "healthcheck_type": tunnel.healthcheck_type,
+                },
             )
         )
         await self.sleep_func(min(1, self._startup_window_seconds()))
@@ -322,7 +368,17 @@ class TunnelWorker:
                 event_type="process_exited" if return_code is not None else "entered_failed",
                 level=EventLevel.ERROR.value,
                 message=message[:1000],
-                detail={"error_code": error_code, "retryable": retryable, "return_code": return_code},
+                detail={
+                    "error_code": error_code,
+                    "retryable": retryable,
+                    "return_code": return_code,
+                    "pid": runtime.pid,
+                    "command_line": runtime.command_line,
+                    "local_bind_ok": runtime.local_bind_ok,
+                    "healthcheck_ok": runtime.healthcheck_ok,
+                    "ssh_target": self._ssh_target(tunnel),
+                    "forward": self._forward_description(tunnel),
+                },
             )
         )
 
@@ -349,7 +405,11 @@ class TunnelWorker:
                 event_type="entered_backoff",
                 level=EventLevel.WARN.value,
                 message=f"Retry scheduled in {delay_seconds}s",
-                detail={"error_code": error_code, "delay_seconds": delay_seconds},
+                detail={
+                    "error_code": error_code,
+                    "delay_seconds": delay_seconds,
+                    "next_retry_at": runtime.next_retry_at.isoformat() if runtime.next_retry_at else None,
+                },
             )
         )
 
@@ -377,6 +437,10 @@ class TunnelWorker:
         ssh_bin = resolve_executable(self.settings.ssh_bin, "ssh")
         if not ssh_bin:
             return "SSH_BIN_MISSING", f"ssh executable not found (configured: {self.settings.ssh_bin})"
+        if tunnel.strict_host_key_checking:
+            ssh_keyscan_bin = resolve_executable(self.settings.ssh_keyscan_bin, "ssh-keyscan")
+            if not ssh_keyscan_bin:
+                return "SSH_KEYSCAN_MISSING", f"ssh-keyscan executable not found (configured: {self.settings.ssh_keyscan_bin})"
         if tunnel.credential.auth_type == "password":
             sshpass_bin = resolve_executable(self.settings.sshpass_bin, "sshpass")
             if not sshpass_bin:
@@ -402,6 +466,8 @@ class TunnelWorker:
         lower = message.lower()
         if "permission denied" in lower or "authentication failed" in lower:
             return "AUTH_FAILED", False
+        if "host key verification failed" in lower and "no " in lower and "host key is known" in lower:
+            return "HOST_KEY_UNKNOWN", False
         if "host key verification failed" in lower:
             return "HOST_KEY_FAILED", False
         if "name or service not known" in lower or "temporary failure in name resolution" in lower:
@@ -414,6 +480,12 @@ class TunnelWorker:
 
     def _event_repo(self, session: Session) -> TunnelEventRepository:
         return TunnelEventRepository(session)
+
+    def _ssh_target(self, tunnel: Tunnel) -> str:
+        return f"{tunnel.credential.username}@{tunnel.ssh_host}:{tunnel.ssh_port}"
+
+    def _forward_description(self, tunnel: Tunnel) -> str:
+        return f"{tunnel.bind_address}:{tunnel.local_port} -> {tunnel.remote_host}:{tunnel.remote_port}"
 
     def _mark_running(self, runtime: TunnelRuntime, tunnel: Tunnel, pid: int) -> None:
         runtime.actual_state = ActualState.RUNNING.value
