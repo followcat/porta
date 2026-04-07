@@ -62,13 +62,22 @@
         <td><span class="badge {{ runtime.actual_state if runtime else 'stopped' }}">{{ runtime.actual_state if runtime else 'stopped' }}</span></td>
         <td>{{ runtime.heartbeat_at.strftime("%Y-%m-%d %H:%M:%S") if runtime and runtime.heartbeat_at else '—' }}</td>
         <td>{{ runtime.current_error_code if runtime and runtime.current_error_code else '—' }}</td>
-        <td>
-          <div class="actions">
-            <form method="post" action="/tunnels/{{ tunnel.id }}/start"><button type="submit" class="button subtle">Start</button></form>
-            <form method="post" action="/tunnels/{{ tunnel.id }}/stop"><button type="submit" class="button subtle">Stop</button></form>
-            <form method="post" action="/tunnels/{{ tunnel.id }}/restart"><button type="submit" class="button subtle">Restart</button></form>
-            <a class="button ghost" href="/tunnels/{{ tunnel.id }}/edit">Edit</a>
-          </div>
+        <td class="actions-cell">
+          <details class="row-menu">
+            <summary class="button subtle row-menu-trigger">Actions</summary>
+            <div class="row-menu-panel">
+              <form method="post" action="/tunnels/{{ tunnel.id }}/start">
+                <button type="submit" class="row-menu-item">Start</button>
+              </form>
+              <form method="post" action="/tunnels/{{ tunnel.id }}/stop">
+                <button type="submit" class="row-menu-item">Stop</button>
+              </form>
+              <form method="post" action="/tunnels/{{ tunnel.id }}/restart">
+                <button type="submit" class="row-menu-item">Restart</button>
+              </form>
+              <a class="row-menu-item" href="/tunnels/{{ tunnel.id }}/edit">Edit</a>
+            </div>
+          </details>
         </td>
       </tr>
       {% else %}

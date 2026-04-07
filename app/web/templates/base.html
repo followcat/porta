@@ -10,6 +10,20 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const pressedClass = "is-pressed";
+      const syncLogPanelPolling = () => {
+        const panel = document.getElementById("tunnel-log-panel");
+        if (!panel) {
+          return;
+        }
+        const hasOpenDetail = Boolean(panel.querySelector("details.log-detail[open]"));
+        const trigger = hasOpenDetail ? "load" : "load, every 5s";
+        if (panel.getAttribute("hx-trigger") !== trigger) {
+          panel.setAttribute("hx-trigger", trigger);
+          if (window.htmx) {
+            window.htmx.process(panel);
+          }
+        }
+      };
 
       document.addEventListener("pointerdown", (event) => {
         const button = event.target.closest(".button");
@@ -45,6 +59,18 @@
         submitter.setAttribute("aria-busy", "true");
         submitter.setAttribute("disabled", "disabled");
       });
+
+      document.addEventListener("toggle", (event) => {
+        if (event.target.matches("#tunnel-log-panel details.log-detail")) {
+          syncLogPanelPolling();
+        }
+      });
+
+      document.body.addEventListener("htmx:afterSwap", () => {
+        syncLogPanelPolling();
+      });
+
+      syncLogPanelPolling();
     });
   </script>
 </head>

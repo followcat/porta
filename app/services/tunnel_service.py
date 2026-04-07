@@ -138,7 +138,7 @@ class TunnelService:
     def get_detail(self, tunnel_id: int) -> TunnelDetailRead:
         tunnel = self.get_tunnel(tunnel_id)
         runtime = self.runtimes.get_or_create(tunnel.id)
-        events = self.events.list_for_tunnel(tunnel.id, limit=50)
+        events = self.events.list_for_tunnel(tunnel.id, limit=150)
         return TunnelDetailRead(
             tunnel=TunnelRead.model_validate(tunnel),
             runtime=TunnelRuntimeRead.model_validate(runtime),

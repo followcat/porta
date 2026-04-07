@@ -8,11 +8,25 @@
   <div class="panel-head">
     <div>
       <h2>Latest Logs</h2>
-      <p class="muted">Auto-refreshes every 5 seconds.</p>
+      <p class="muted">Auto-refreshes every 5 seconds. Showing {{ detail.recent_events | length }} latest events.</p>
     </div>
     {% set runtime = detail.runtime %}
     <span class="badge {{ runtime.actual_state }}">{{ runtime.actual_state }}</span>
   </div>
+
+  {% if runtime_status %}
+  <div class="alert diagnostic {{ runtime_status.kind }}">
+    <strong>{{ runtime_status.title }}</strong>
+    <p>{{ runtime_status.body }}</p>
+  </div>
+  {% endif %}
+
+  {% if runtime_hint %}
+  <div class="alert diagnostic {{ runtime_hint.kind }}">
+    <strong>{{ runtime_hint.title }}</strong>
+    <p>{{ runtime_hint.body }}</p>
+  </div>
+  {% endif %}
 
   <div class="log-summary-grid">
     <article class="log-summary">
@@ -25,26 +39,73 @@
       <strong>{{ runtime.last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.last_seen_at else '—' }}</strong>
       <p>PID {{ runtime.pid or '—' }} · Restart count {{ runtime.restart_count }}</p>
     </article>
+    <article class="log-summary">
+      <span class="log-label">Local Bind Check</span>
+      <strong>
+        {% if runtime.local_bind_ok is sameas true %}ok{% elif runtime.local_bind_ok is sameas false %}failed{% else %}pending{% endif %}
+      </strong>
+      <p>Healthcheck: {% if runtime.healthcheck_ok is sameas true %}ok{% elif runtime.healthcheck_ok is sameas false %}failed{% else %}pending{% endif %}</p>
+    </article>
+    <article class="log-summary">
+      <span class="log-label">Next Retry</span>
+      <strong>{{ runtime.next_retry_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.next_retry_at else '—' }}</strong>
+      <p>Consecutive failures {{ runtime.consecutive_failures }}</p>
+    </article>
   </div>
 
-  <div class="log-console">
-    {% for event in detail.recent_events[:12] %}
-    <div class="log-line">
-      <div class="log-meta">
-        <span>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</span>
-        <span class="badge {{ event.level }}">{{ event.level }}</span>
-        <span class="log-type">{{ event.event_type }}</span>
-      </div>
-      <div class="log-message">{{ event.message }}</div>
-      {% if event.detail %}
-      <details class="log-detail">
-        <summary>detail</summary>
-        <pre>{{ event.detail }}</pre>
-      </details>
-      {% endif %}
+  <div class="runtime-snapshot-grid">
+    <article class="snapshot-card">
+      <span class="log-label">SSH Target</span>
+      <strong>{{ runtime_snapshot.ssh_target }}</strong>
+      <p>{{ runtime_snapshot.forward }}</p>
+    </article>
+    <article class="snapshot-card">
+      <span class="log-label">Check Target</span>
+      <strong>{{ runtime_snapshot.local_check_target }}</strong>
+      <p>Healthcheck {{ runtime_snapshot.healthcheck }}</p>
+    </article>
+    <article class="snapshot-card span-2">
+      <span class="log-label">Command Line</span>
+      <pre class="snapshot-code">{{ runtime_snapshot.command_line or 'No command line captured yet.' }}</pre>
+      <p>Last exit code {{ runtime_snapshot.last_exit_code if runtime_snapshot.last_exit_code is not none else '—' }}</p>
+    </article>
+  </div>
+
+  <div class="timeline-caption">
+    <span>Newest first</span>
+    <span>Scrollable timeline</span>
+  </div>
+
+  <div class="timeline-scroll">
+    <div class="timeline-list">
+      {% for event in detail.recent_events %}
+      <article class="timeline-entry level-{{ event.level }}">
+        <div class="timeline-rail">
+          <span class="timeline-dot {{ event.level }}"></span>
+        </div>
+        <div class="timeline-card">
+          <div class="timeline-head">
+            <div class="timeline-meta">
+              <span>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</span>
+              <span class="badge {{ event.level }}">{{ event.level }}</span>
+              <span class="log-type">{{ event.event_type }}</span>
+            </div>
+          </div>
+          <div class="timeline-message">{{ event.message }}</div>
+          {% if event.detail %}
+          <details class="log-detail">
+            <summary>
+              <span class="log-detail-toggle">Show detail</span>
+              <span class="log-detail-hint">auto-refresh pauses while expanded</span>
+            </summary>
+            <pre>{{ event.detail | tojson(indent=2) }}</pre>
+          </details>
+          {% endif %}
+        </div>
+      </article>
+      {% else %}
+      <div class="log-line empty">No logs recorded.</div>
+      {% endfor %}
     </div>
-    {% else %}
-    <div class="log-line empty">No logs recorded.</div>
-    {% endfor %}
   </div>
 </section>

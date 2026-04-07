@@ -12,6 +12,11 @@
   {% if error %}
   <div class="alert error">{{ error }}</div>
   {% endif %}
+  {% if tunnel %}
+  <div class="alert warning">
+    Saving changes will automatically restart this tunnel when it is currently active or expected to be running.
+  </div>
+  {% endif %}
   <form method="post" action="{{ '/tunnels/{}/edit'.format(tunnel.id) if tunnel else '/tunnels/new' }}" class="stack">
     <div class="form-grid">
       <label>

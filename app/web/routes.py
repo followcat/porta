@@ -43,6 +43,151 @@ def _common_context(request: Request, user: User | None, **kwargs) -> dict:
     return {"request": request, "current_user": user, **kwargs}
 
 
+def _local_check_host(bind_address: str) -> str:
+    if bind_address in {"0.0.0.0", "::", "*", ""}:
+        return "127.0.0.1"
+    return bind_address
+
+
+def _runtime_hint(detail) -> dict | None:
+    runtime = detail.runtime
+    if not runtime or not runtime.current_error_message:
+        return None
+
+    message = runtime.current_error_message
+    lower = message.lower()
+    target = f"{detail.tunnel.ssh_host}:{detail.tunnel.ssh_port}"
+
+    if "host key verification failed" in lower and "no " in lower and "host key is known" in lower:
+        return {
+            "kind": "warn",
+            "title": "First-time SSH host key trust is required",
+            "body": (
+                f"Porta now preloads host keys with ssh-keyscan before connecting in strict mode. "
+                f"If this warning appears again for {target}, the service user likely cannot write "
+                f"its known_hosts file or the scan failed."
+            ),
+        }
+
+    if "ssh-keyscan" in lower or "host key scan" in lower:
+        return {
+            "kind": "warn",
+            "title": "Automatic host-key preload failed",
+            "body": (
+                f"Porta tried to fetch the SSH host key for {target} before connecting, but the pre-check failed. "
+                f"Review network reachability and the service user's known_hosts permissions."
+            ),
+        }
+
+    if "host key verification failed" in lower:
+        return {
+            "kind": "error",
+            "title": "SSH host key mismatch detected",
+            "body": (
+                f"The host key for {target} does not match the existing known_hosts entry. Review and clean the "
+                f"service user's ~/.ssh/known_hosts before retrying."
+            ),
+        }
+
+    if "permission denied" in lower or "authentication failed" in lower:
+        return {
+            "kind": "error",
+            "title": "SSH authentication failed",
+            "body": (
+                "The tunnel reached the SSH server, but the username, password, key, or passphrase was rejected."
+            ),
+        }
+
+    return None
+
+
+def _runtime_status(detail) -> dict:
+    runtime = detail.runtime
+    tunnel = detail.tunnel
+
+    if not runtime:
+        return {
+            "kind": "info",
+            "title": "Runtime state is not initialized yet",
+            "body": "Porta has not created a runtime snapshot for this tunnel yet.",
+        }
+
+    check_host = _local_check_host(tunnel.bind_address)
+    state = runtime.actual_state.value if hasattr(runtime.actual_state, "value") else str(runtime.actual_state)
+
+    if state == "starting":
+        return {
+            "kind": "info",
+            "title": "Tunnel is still starting",
+            "body": (
+                f"SSH process pid {runtime.pid or '—'} is alive. Porta is waiting for the local forward "
+                f"{check_host}:{tunnel.local_port} to accept connections."
+            ),
+        }
+
+    if state == "running":
+        health_text = "healthcheck passed" if runtime.healthcheck_ok else "healthcheck pending or disabled"
+        return {
+            "kind": "success",
+            "title": "Tunnel is ready",
+            "body": (
+                f"Local forward {check_host}:{tunnel.local_port} is reachable and {health_text}."
+            ),
+        }
+
+    if state == "degraded":
+        return {
+            "kind": "warn",
+            "title": "Tunnel is partially working",
+            "body": runtime.current_error_message or "The SSH process is alive, but runtime checks are failing.",
+        }
+
+    if state == "backoff":
+        next_retry = runtime.next_retry_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.next_retry_at else "unknown"
+        return {
+            "kind": "warn",
+            "title": "Tunnel is waiting before retry",
+            "body": (
+                f"Last check failed. Porta will retry automatically at {next_retry}. "
+                f"{runtime.current_error_message or ''}".strip()
+            ),
+        }
+
+    if state == "failed":
+        return {
+            "kind": "error",
+            "title": "Tunnel is in failed state",
+            "body": runtime.current_error_message or "Automatic retries are paused until you restart or edit the tunnel.",
+        }
+
+    if state == "stopped":
+        return {
+            "kind": "info",
+            "title": "Tunnel is stopped",
+            "body": "Desired state is stopped, or the tunnel has been terminated intentionally.",
+        }
+
+    return {
+        "kind": "info",
+        "title": f"Current state: {state}",
+        "body": runtime.current_error_message or "No additional runtime detail is available.",
+    }
+
+
+def _runtime_snapshot(detail) -> dict:
+    runtime = detail.runtime
+    tunnel = detail.tunnel
+    check_host = _local_check_host(tunnel.bind_address)
+    return {
+        "ssh_target": f"{tunnel.ssh_host}:{tunnel.ssh_port}",
+        "forward": f"{tunnel.bind_address}:{tunnel.local_port} -> {tunnel.remote_host}:{tunnel.remote_port}",
+        "local_check_target": f"{check_host}:{tunnel.local_port}",
+        "healthcheck": f"{tunnel.healthcheck_type}{(' ' + tunnel.healthcheck_path) if tunnel.healthcheck_path else ''}",
+        "command_line": runtime.command_line if runtime else None,
+        "last_exit_code": runtime.last_exit_code if runtime else None,
+    }
+
+
 def _parse_tunnel_payload(form) -> TunnelCreate | TunnelUpdate:
     return TunnelCreate(
         name=str(form.get("name", "")).strip(),
@@ -193,7 +338,17 @@ def tunnel_detail(request: Request, tunnel_id: int):
     session_factory = get_session_factory()
     with session_factory() as session:
         detail = TunnelService(session).get_detail(tunnel_id)
-    return templates.TemplateResponse("tunnels/detail.html", _common_context(request, user, detail=detail))
+    return templates.TemplateResponse(
+        "tunnels/detail.html",
+        _common_context(
+            request,
+            user,
+            detail=detail,
+            runtime_hint=_runtime_hint(detail),
+            runtime_status=_runtime_status(detail),
+            runtime_snapshot=_runtime_snapshot(detail),
+        ),
+    )
 
 
 @router.get("/tunnels/{tunnel_id}/logs", response_class=HTMLResponse)
@@ -204,7 +359,17 @@ def tunnel_log_panel(request: Request, tunnel_id: int):
     session_factory = get_session_factory()
     with session_factory() as session:
         detail = TunnelService(session).get_detail(tunnel_id)
-    return templates.TemplateResponse("tunnels/log_panel.html", _common_context(request, user, detail=detail))
+    return templates.TemplateResponse(
+        "tunnels/log_panel.html",
+        _common_context(
+            request,
+            user,
+            detail=detail,
+            runtime_hint=_runtime_hint(detail),
+            runtime_status=_runtime_status(detail),
+            runtime_snapshot=_runtime_snapshot(detail),
+        ),
+    )
 
 
 @router.get("/tunnels/{tunnel_id}/edit", response_class=HTMLResponse)
@@ -226,16 +391,33 @@ async def tunnel_update(request: Request, tunnel_id: int):
         return _redirect("/login")
     form = await request.form()
     payload = TunnelUpdate.model_validate(_parse_tunnel_payload(form).model_dump())
+    auto_restart = True
     session_factory = get_session_factory()
     with session_factory() as session:
         try:
-            TunnelService(session).update_tunnel(tunnel_id, payload, user.id)
+            service = TunnelService(session)
+            existing = service.get_tunnel(tunnel_id)
+            should_restart = (
+                existing.desired_state == DesiredState.RUNNING.value
+                or (existing.runtime and existing.runtime.actual_state in {"running", "starting", "degraded", "backoff"})
+            )
+            service.update_tunnel(tunnel_id, payload, user.id)
             session.commit()
         except Exception as exc:
             session.rollback()
             tunnel = TunnelService(session).get_tunnel(tunnel_id)
             credentials = CredentialService(session).list_credentials()
             return templates.TemplateResponse("tunnels/form.html", _common_context(request, user, tunnel=tunnel, credentials=credentials, error=str(exc)), status_code=400)
+    if auto_restart and should_restart:
+        manager = request.app.state.supervisor_manager
+        with session_factory() as session:
+            TunnelService(session).set_desired_state(tunnel_id, DesiredState.STOPPED, user.id, "stop")
+            session.commit()
+        await manager.run_once([tunnel_id])
+        with session_factory() as session:
+            TunnelService(session).restart(tunnel_id, user.id)
+            session.commit()
+        await manager.run_once([tunnel_id])
     return _redirect(f"/tunnels/{tunnel_id}")
 
 

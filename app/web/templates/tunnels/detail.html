@@ -40,8 +40,11 @@
       <div><dt>PID</dt><dd>{{ runtime.pid or '—' }}</dd></div>
       <div><dt>Started</dt><dd>{{ runtime.started_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.started_at else '—' }}</dd></div>
       <div><dt>Last Seen</dt><dd>{{ runtime.last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.last_seen_at else '—' }}</dd></div>
+      <div><dt>Next Retry</dt><dd>{{ runtime.next_retry_at.strftime("%Y-%m-%d %H:%M:%S") if runtime.next_retry_at else '—' }}</dd></div>
       <div><dt>Restart Count</dt><dd>{{ runtime.restart_count }}</dd></div>
       <div><dt>Failures</dt><dd>{{ runtime.consecutive_failures }}</dd></div>
+      <div><dt>Local Bind Check</dt><dd>{% if runtime.local_bind_ok is sameas true %}ok{% elif runtime.local_bind_ok is sameas false %}failed{% else %}pending{% endif %}</dd></div>
+      <div><dt>Healthcheck Result</dt><dd>{% if runtime.healthcheck_ok is sameas true %}ok{% elif runtime.healthcheck_ok is sameas false %}failed{% else %}pending{% endif %}</dd></div>
       <div><dt>Health</dt><dd>{{ runtime.last_healthcheck_message or '—' }}</dd></div>
       <div><dt>Error</dt><dd>{{ runtime.current_error_code or '—' }}{% if runtime.current_error_message %}<br>{{ runtime.current_error_message }}{% endif %}</dd></div>
     </dl>
