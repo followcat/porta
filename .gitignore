@@ -1,0 +1,43 @@
+# Local secrets
+.env
+.env.local
+
+# Internal / planning artifacts
+AIdo/
+.codex
+.codex/
+.github/copilot-instructions.md
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+.venv.*/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Database / runtime files
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# Editors / OS noise
+.DS_Store
+.idea/
+.vscode/
