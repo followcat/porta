@@ -796,10 +796,12 @@ textarea {
 }
 
 .timeline-scroll {
-  max-height: 42rem;
+  height: 42rem;
   max-width: 100%;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   border-radius: 20px;
   background:
@@ -814,6 +816,7 @@ textarea {
   display: grid;
   gap: 14px;
   min-width: 0;
+  padding-left: 28px;
 }
 
 .timeline-list::before {
@@ -832,19 +835,14 @@ textarea {
 
 .timeline-entry {
   position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 14px;
+  display: block;
   min-width: 0;
 }
 
-.timeline-rail {
-  position: relative;
-  min-height: 100%;
-}
-
 .timeline-dot {
-  position: relative;
+  position: absolute;
+  top: 18px;
+  left: -28px;
   z-index: 1;
   display: block;
   width: 24px;
@@ -1068,5 +1066,9 @@ code {
 
   .span-2 {
     grid-column: auto;
+  }
+
+  .timeline-scroll {
+    height: 34rem;
   }
 }
