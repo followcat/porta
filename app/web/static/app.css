@@ -703,6 +703,21 @@ textarea {
   border: 1px solid var(--line);
 }
 
+.snapshot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.button-copy {
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  box-shadow: none;
+  flex: 0 0 auto;
+}
+
 .snapshot-card strong {
   display: block;
   margin-top: 6px;

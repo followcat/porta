@@ -64,9 +64,23 @@
       <strong>{{ runtime_snapshot.local_check_target }}</strong>
       <p>Healthcheck {{ runtime_snapshot.healthcheck }}</p>
     </article>
-    <article class="snapshot-card span-2">
-      <span class="log-label">Command Line</span>
-      <pre class="snapshot-code">{{ runtime_snapshot.command_line or 'No command line captured yet.' }}</pre>
+    <article class="snapshot-card span-2" x-data="{ copied: false }">
+      <div class="snapshot-head">
+        <span class="log-label">Command Line</span>
+        <button
+          type="button"
+          class="button ghost button-copy"
+          @click="
+            if ($refs.commandText) {
+              navigator.clipboard.writeText($refs.commandText.innerText.trim());
+              copied = true;
+              setTimeout(() => copied = false, 1500);
+            }
+          "
+          x-text="copied ? 'Copied' : 'Copy command'"
+        ></button>
+      </div>
+      <pre class="snapshot-code" x-ref="commandText">{{ runtime_snapshot.command_line or 'No command line captured yet.' }}</pre>
       <p>Last exit code {{ runtime_snapshot.last_exit_code if runtime_snapshot.last_exit_code is not none else '—' }}</p>
     </article>
   </div>
