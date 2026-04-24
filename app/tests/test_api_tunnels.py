@@ -10,6 +10,7 @@ from app.api.routes import tunnels as tunnel_routes
 from app.schemas.auth import LoginRequest
 from app.schemas.credential import CredentialCreate
 from app.schemas.tunnel import TunnelCreate
+from app.core.exceptions import ValidationError
 from app.services.auth_service import AuthService
 from app.services.credential_service import CredentialService
 
@@ -117,3 +118,55 @@ async def test_shared_access_auto_enables_gateway_ports(session_factory):
 
         assert created.bind_address == "0.0.0.0"
         assert created.allow_gateway_ports is True
+
+
+@pytest.mark.asyncio
+async def test_duplicate_bind_and_local_port_returns_clear_error(session_factory):
+    with session_factory() as session:
+        admin = AuthService(session).create_admin("admin", "secret-password")
+        credential = CredentialService(session).create_credential(
+            CredentialCreate(
+                name="duplicate-port-password",
+                auth_type="password",
+                username="deployer",
+                password="ssh-secret",
+            ),
+            admin.id,
+        )
+        session.commit()
+
+        first = tunnel_routes.create_tunnel(
+            TunnelCreate(
+                name="reporting-a",
+                ssh_host="example.com",
+                ssh_port=22,
+                credential_id=credential.id,
+                bind_address="0.0.0.0",
+                local_port=18092,
+                remote_host="127.0.0.1",
+                remote_port=8092,
+                desired_state="stopped",
+                healthcheck_type="tcp",
+            ),
+            session,
+            admin,
+        )
+        assert first.local_port == 18092
+
+        with pytest.raises(ValidationError, match="local port already in use for this bind address"):
+            tunnel_routes.create_tunnel(
+                TunnelCreate(
+                    name="reporting-b",
+                    ssh_host="example.com",
+                    ssh_port=22,
+                    credential_id=credential.id,
+                    bind_address="0.0.0.0",
+                    local_port=18092,
+                    remote_host="127.0.0.1",
+                    remote_port=8093,
+                    desired_state="stopped",
+                    healthcheck_type="tcp",
+                ),
+                session,
+                admin,
+            )
