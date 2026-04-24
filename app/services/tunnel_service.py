@@ -40,6 +40,8 @@ class TunnelService:
         data = self._normalize_tunnel_payload(data)
         if self.tunnels.get_by_name(data.name):
             raise ResourceConflictError("tunnel name already exists")
+        if self.tunnels.get_by_bind_local_port(data.bind_address, data.local_port):
+            raise ValidationError("local port already in use for this bind address")
         self._validate_credential_exists(data.credential_id)
         self._validate_tunnel_payload(data)
         tunnel = Tunnel(**data.model_dump())
@@ -67,6 +69,9 @@ class TunnelService:
         existing_by_name = self.tunnels.get_by_name(data.name)
         if existing_by_name and existing_by_name.id != tunnel.id:
             raise ResourceConflictError("tunnel name already exists")
+        existing_by_bind_local_port = self.tunnels.get_by_bind_local_port(data.bind_address, data.local_port)
+        if existing_by_bind_local_port and existing_by_bind_local_port.id != tunnel.id:
+            raise ValidationError("local port already in use for this bind address")
         self._validate_credential_exists(data.credential_id)
         self._validate_tunnel_payload(data)
         for key, value in data.model_dump().items():

@@ -55,6 +55,13 @@ class TunnelRepository:
     def get_by_name(self, name: str) -> Tunnel | None:
         return self.session.scalar(select(Tunnel).where(Tunnel.name == name))
 
+    def get_by_bind_local_port(self, bind_address: str, local_port: int) -> Tunnel | None:
+        stmt = select(Tunnel).where(
+            Tunnel.bind_address == bind_address,
+            Tunnel.local_port == local_port,
+        )
+        return self.session.scalar(stmt)
+
     def create(self, tunnel: Tunnel) -> Tunnel:
         self.session.add(tunnel)
         self.session.flush()
